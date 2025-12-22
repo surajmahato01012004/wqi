@@ -152,28 +152,28 @@ def chat():
         return jsonify({"error": "Server is not configured with Hugging Face token"}), 500
 
     system_prefix = (
-        "You are an helpful assistant specialized in science and health. "
+        "You are a helpful assistant specialized in science and health. "
         "Only answer questions related to science, medicine, biology, chemistry, physics, "
         "public health, fitness, nutrition, and healthcare. If the question is unrelated, "
         "political, financial, legal, religious, entertainment, or general chit-chat, "
         "politely decline and ask for a science/health question."
     )
-    prompt = f"{system_prefix}\n\nUser: {user_message}\nAssistant:"
-
     try:
         resp = requests.post(
-            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+            "https://router.huggingface.co/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/json",
+                "Content-Type": "application/json",
             },
             json={
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": 300,
-                    "temperature": 0.7,
-                    "return_full_text": False
-                }
+                "model": "mistralai/Mistral-7B-Instruct-v0.2",
+                "messages": [
+                    {"role": "system", "content": system_prefix},
+                    {"role": "user", "content": user_message},
+                ],
+                "max_tokens": 300,
+                "temperature": 0.7,
             },
             timeout=20,
         )
@@ -185,19 +185,18 @@ def chat():
 
     try:
         data = resp.json()
+        content = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
     except Exception:
         return jsonify({"error": "Invalid response from chat service"}), 502
 
-    text = None
-    if isinstance(data, list) and data:
-        item = data[0]
-        text = item.get("generated_text") or item.get("text")
-    elif isinstance(data, dict):
-        text = data.get("generated_text") or data.get("text")
-    if not text:
-        text = "I can only answer science and health questions. Please try a related topic."
+    if not content:
+        content = "I can only answer science and health questions. Please try a related topic."
 
-    return jsonify({"reply": text})
+    return jsonify({"reply": content})
 @app.route('/data')
 def data_page():
     locations = Location.query.all()
