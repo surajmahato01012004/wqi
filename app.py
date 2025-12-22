@@ -5,6 +5,7 @@ from math import radians, sin, cos, sqrt, atan2
 from flask_sqlalchemy import SQLAlchemy
 import csv
 import threading
+import requests
 
 # --- Application Setup ---
 app = Flask(__name__)
@@ -135,6 +136,68 @@ def map_page():
     google_maps_key = os.environ.get("GOOGLE_MAPS_API_KEY")
     return render_template("map.html", google_maps_key=google_maps_key)
 
+@app.route('/chatbot.html')
+def chatbot_page():
+    return render_template("chatbot.html")
+
+@app.route('/chat', methods=['POST'])
+def chat():
+    payload = request.get_json(silent=True) or {}
+    user_message = (payload.get("message") or "").strip()
+    if not user_message:
+        return jsonify({"error": "Please provide a question in 'message'"}), 400
+
+    token = os.environ.get("HUGGING_FACE_API_TOKEN")
+    if not token:
+        return jsonify({"error": "Server is not configured with Hugging Face token"}), 500
+
+    system_prefix = (
+        "You are an helpful assistant specialized in science and health. "
+        "Only answer questions related to science, medicine, biology, chemistry, physics, "
+        "public health, fitness, nutrition, and healthcare. If the question is unrelated, "
+        "political, financial, legal, religious, entertainment, or general chit-chat, "
+        "politely decline and ask for a science/health question."
+    )
+    prompt = f"{system_prefix}\n\nUser: {user_message}\nAssistant:"
+
+    try:
+        resp = requests.post(
+            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            },
+            json={
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": 300,
+                    "temperature": 0.7,
+                    "return_full_text": False
+                }
+            },
+            timeout=20,
+        )
+    except Exception as e:
+        return jsonify({"error": "Chat service unreachable", "detail": str(e)}), 502
+
+    if resp.status_code >= 400:
+        return jsonify({"error": "Chat service failed", "detail": resp.text}), 502
+
+    try:
+        data = resp.json()
+    except Exception:
+        return jsonify({"error": "Invalid response from chat service"}), 502
+
+    text = None
+    if isinstance(data, list) and data:
+        item = data[0]
+        text = item.get("generated_text") or item.get("text")
+    elif isinstance(data, dict):
+        text = data.get("generated_text") or data.get("text")
+    if not text:
+        text = "I can only answer science and health questions. Please try a related topic."
+
+    return jsonify({"reply": text})
 @app.route('/data')
 def data_page():
     locations = Location.query.all()

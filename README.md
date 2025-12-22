@@ -99,6 +99,37 @@ A Flask application that computes and visualizes Water Quality Index (WQI). It s
 - Seed:
   - `POST /seed/kolkata` inserts demo locations and samples in Kolkata
 
+## Endpoints (Complete)
+- UI pages:
+  - `GET /` calculator page
+  - `GET /dashboard` dashboard with links
+  - `GET /map` Google Maps WQI view
+  - `GET /data` database dashboard with CRUD
+- Calculation:
+  - `POST /calculate`
+    - Body JSON: `{ "ph": <float>, "do": <float>, "turbidity": <float>, "tds": <float>, "nitrate": <float> }`
+    - Returns: `{ "wqi": <number>, "status": <string>, "color": <string> }`
+- Location APIs:
+  - `GET /api/locations` list all locations with latest WQI
+  - `GET /api/wqi?lat=<latitude>&lng=<longitude>` nearest location’s latest WQI
+- CRUD APIs:
+  - `POST /data/location` create location
+  - `POST /data/location/<id>/delete` delete location
+  - `POST /data/sample` create sample (for a location)
+  - `POST /data/sample/<id>/update` update sample
+  - `POST /data/sample/<id>/delete` delete sample
+- Seed:
+  - `POST /seed/kolkata` insert demo locations and samples for Kolkata
+- IoT ingestion:
+  - `GET /api/iot` inspect latest readings
+  - `POST /api/iot`
+    - Body JSON: `{ "temperature_c": <float>, "turbidity_percent": <float> }`
+    - Returns: `{ "status": "ok", "id": <int>, "timestamp": "<ISO8601>" }`
+  - Render URL for ESP32:
+    - `https://wqi-hxhz.onrender.com/api/iot`
+    - Example (ESP32 or Postman):
+      - `POST https://wqi-hxhz.onrender.com/api/iot` with JSON body above
+
 ## Google Map Workflow
 - The page `templates/map.html` loads the Google Maps API with your `GOOGLE_MAPS_API_KEY` and includes `static/map.js`.
 - On page load, `map.js`:

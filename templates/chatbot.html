@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your AI Companion</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='chatbot.css') }}">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand">AquaTrack</a>
+            <div class="d-flex gap-2">
+                <a class="btn btn-light" href="{{ url_for('dashboard') }}">Dashboard</a>
+                <a class="btn btn-outline-light" href="{{ url_for('home') }}">Calculator</a>
+                <a class="btn btn-outline-light" href="{{ url_for('map_page') }}">Map</a>
+                <a class="btn btn-outline-light" href="{{ url_for('data_page') }}">Database</a>
+                <a class="btn btn-outline-light active" href="/chatbot.html">AI Chatbot</a>
+            </div>
+        </div>
+    </nav>
+    <div class="container py-4">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white">
+                        <h5 class="mb-0">Your AI Companion</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="chat-window" class="chat-window"></div>
+                        <div id="loading" class="loading d-none">Thinking...</div>
+                        <div class="input-group mt-3">
+                            <input id="user-input" type="text" class="form-control" placeholder="Ask about science or health">
+                            <button id="send-btn" class="btn btn-primary">Send</button>
+                        </div>
+                        <div id="hint" class="text-muted small mt-2">Answers only science and health questions.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        window.CHAT_BACKEND_URL = "https://wqi-hxhz.onrender.com/chat";
+    </script>
+    <script src="{{ url_for('static', filename='chatbot.js') }}"></script>
+</body>
+</html>
+
