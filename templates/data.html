@@ -121,8 +121,14 @@
                             <td><span class="badge bg-{{ r.color }}">{{ r.status }}</span></td>
                             <td>{{ r.timestamp.strftime("%Y-%m-%d %H:%M:%S") if r.timestamp else "-" }}</td>
                             <td class="text-nowrap">
+                                <form class="d-inline" method="post" action="{{ url_for('delete_location', location_id=r.location_id) }}">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete location and its samples?')">Delete Location</button>
+                                </form>
                                 {% if r.sample_id %}
                                 <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#edit{{ r.sample_id }}">Edit Sample</button>
+                                <form class="d-inline" method="post" action="{{ url_for('delete_sample', sample_id=r.sample_id) }}">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete sample?')">Delete Sample</button>
+                                </form>
                                 {% endif %}
                             </td>
                         </tr>

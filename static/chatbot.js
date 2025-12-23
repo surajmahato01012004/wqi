@@ -70,7 +70,10 @@ async function sendMessage() {
     } else {
       const data = await resp.json();
       let reply = data.reply || data.error || 'No response';
-      reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+      // Clean up response if backend didn't catch it
+      reply = reply.replace(/<think>[\s\S]*?<\/think>/gi, '');
+      reply = reply.replace(/Thinking Process:[\s\S]*?(?=\n\n|$)/gi, '');
+      reply = reply.trim();
       appendMessage('assistant', reply);
       cache.set(key, reply);
     }

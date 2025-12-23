@@ -8,44 +8,18 @@ import threading
 import requests
 import re
 
-# --- Application Setup ---
-app = Flask(__name__)
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "wqi.db")
 DB_URL = os.environ.get("DATABASE_URL")
-if DB_URL:
-    if DB_URL.startswith("postgres://"):
-        DB_URL = DB_URL.replace("postgres://", "postgresql+psycopg://", 1)
-    elif DB_URL.startswith("postgresql://") and "+psycopg" not in DB_URL:
-        DB_URL = DB_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-app.config["SQLALCHEMY_DATABASE_URI"] = DB_URL if DB_URL else f"sqlite:///{DB_PATH}"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-db = SQLAlchemy(app)
-with app.app_context():
-    db.create_all()
-iot_lock = threading.Lock()
-
-# --- WQI Calculation Constants ---
-PARAMETERS = {
-    'ph': {'standard': 8.5, 'ideal': 7.0, 'weight': 4},
-    'tds': {'standard': 500, 'ideal': 0, 'weight': 1},
-    'do': {'standard': 5, 'ideal': 14.6, 'weight': 5},
-    'turbidity': {'standard': 5, 'ideal': 0, 'weight': 3},
-    'nitrate': {'standard': 45, 'ideal': 0, 'weight': 2}
-}
-
-# --- ORM Models ---
-class Location(db.Model):
-    __tablename__ = "locations"
+app.config["SQLALCHEMY_DATABASE_URI"] = DB
+Llation Constants ---i: , 'weight': 2}
+DBURLf DB_RLc(dsq)i///DB_PATH    __tablename__ = "locations"
     id = db.Column(db.Integer, primary_key=True)
     latitude = db.Column(db.Float, nullable=False, index=True)
-    longitude = db.Column(db.Float, nullable=False, index=True)
-    name = db.Column(db.String(255), nullable=True)
-    samples = db.relationship("WaterSample", backref="location", lazy=True, cascade="all, delete-orphan")
-
-class WaterSample(db.Model):
+    longitude = db.Cole = db.Column(db.String(255), nullable=True)
+samples = db.relam
     __tablename__ = "water_samples"
     id = db.Column(db.Integer, primary_key=True)
     location_id = db.Column(db.Integer, db.ForeignKey("locations.id"), nullable=False, index=True)
@@ -65,6 +39,15 @@ class IoTReading(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
 # --- Core WQI Function ---
+def clean_response(text):
+    if not text:
+        return ""
+    # Remove <think> tags
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.IGNORECASE)
+    # Remove Thinking Process: ...
+    text = re.sub(r"Thinking Process:[\s\S]*?(?=\n\n|\Z)", "", text, flags=re.IGNORECASE)
+    return text.strip()
+
 def calculate_wqi(data):
     total_w = 0
     total_qw = 0
@@ -157,7 +140,10 @@ def chat():
     if not token:
         return jsonify({"error": "Server is not configured with Hugging Face token"}), 500
 
-    system_prefix = "You are a helpful assistant. Answer the user’s question clearly and concisely."
+    system_prefix = (
+        "You are a helpful assistant. Provide detailed and comprehensive answers when the user asks for explanations. "
+        "Do not include your internal chain of thought or reasoning process in the final output, only the response to the user."
+    )
     model_id = os.environ.get("HF_CHAT_MODEL", "HuggingFaceTB/SmolLM3-3B:hf-inference")
     fallback_model = "HuggingFaceTB/SmolLM3-3B:hf-inference"
     try:
@@ -174,7 +160,7 @@ def chat():
                     {"role": "system", "content": system_prefix},
                     {"role": "user", "content": user_message},
                 ],
-                "max_tokens": 512,
+                "max_tokens": 1000,
                 "temperature": 0.7,
             },
             timeout=30,
@@ -220,7 +206,7 @@ def chat():
                 )
             except Exception:
                 return jsonify({"error": "Invalid response from chat service"}), 502
-            if not content:
+            if not content:10
                 content = "No answer available."
             content = re.sub(r"<think>[\\s\\S]*?</think>", "", content, flags=re.IGNORECASE)
             content = content.strip()
@@ -229,50 +215,18 @@ def chat():
 
     try:
         data = resp.json()
-        choice = data.get("choices", [{}])[0]
-        content = choice.get("message", {}).get("content", "")
-        finish_reason = choice.get("finish_reason", "")
+        content = (
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+        )
     except Exception:
         return jsonify({"error": "Invalid response from chat service"}), 502
 
     if not content:
         content = "No answer available."
-    content = re.sub(r"<think>[\\s\\S]*?</think>", "", content, flags=re.IGNORECASE).strip()
-
-    if finish_reason == "length":
-        try:
-            resp_more = requests.post(
-                "https://router.huggingface.co/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model_id,
-                    "messages": [
-                        {"role": "system", "content": system_prefix},
-                        {"role": "user", "content": user_message},
-                        {"role": "assistant", "content": content},
-                        {"role": "user", "content": "Please finish your previous answer."}
-                    ],
-                    "max_tokens": 256,
-                    "temperature": 0.7,
-                },
-                timeout=30,
-            )
-            if resp_more.status_code < 400:
-                data2 = resp_more.json()
-                content2 = (
-                    data2.get("choices", [{}])[0]
-                    .get("message", {})
-                    .get("content", "")
-                )
-                content2 = re.sub(r"<think>[\\s\\S]*?</think>", "", content2, flags=re.IGNORECASE).strip()
-                if content2:
-                    content = f"{content}\n\n{content2}"
-        except Exception:
-            pass
+    content = re.sub(r"<think>[\\s\\S]*?</think>", "", content, flags=re.IGNORECASE)
+    content = content.strip()
 
     return jsonify({"reply": content})
 @app.route('/data')
