@@ -3,7 +3,7 @@
 **System**
 - SQLite in development is not ideal for concurrent writes or container restarts; prefer Postgres in production.
 - Nearest-location queries use Haversine over all rows; for large datasets, add geospatial indexing or a spatial DB.
-- No authentication/authorization; admin actions are open in dev setup.
+- Authentication is client-side only (localStorage) and not secure for production; implement server-side sessions and roles for real deployments.
 - Basic input validation on forms; stricter validation and rate limiting recommended for production.
 - Animated background uses canvas; extremely low-end devices may prefer a static image toggle.
 
@@ -27,6 +27,7 @@
   - No content filtering beyond removing chain-of-thought. Consider moderation if exposed publicly.
 - Client behavior:
   - Enforces a minimum send delay to avoid spamming backend; may frustrate rapid trial use.
+  - Frontend calls relative `/chat` to avoid hardcoded external URLs.
 
 **What It Can Answer**
 - Generic questions about WQI concepts, parameters, and usage guidance.

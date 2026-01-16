@@ -3,7 +3,7 @@ const inputEl = document.getElementById('user-input');
 const sendBtn = document.getElementById('send-btn');
 const clearBtn = document.getElementById('clear-btn');
 const loadingEl = document.getElementById('loading');
-const backendUrl = window.CHAT_BACKEND_URL || '/chat';
+const backendUrl = window.CHAT_BACKEND_URL || '/chat';                 
 
 const cache = new Map();
 let lastSentAt = 0;

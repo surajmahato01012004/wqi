@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+
+{% block title %}Aqua Track: Water Quality Monitoring System - Login{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-center align-items-center" style="min-height: 70vh;">
+    <div class="col-11 col-sm-8 col-md-6 col-lg-4">
+        <div class="card shadow-sm p-4">
+            <h1 class="h4 mb-3 text-center">Login</h1>
+            <p class="text-muted text-center mb-4">Welcome Back. Your Safety Matters.</p>
+            <div id="loginError" class="alert alert-danger d-none" role="alert"></div>
+            <form id="loginForm" novalidate>
+                <div class="mb-3">
+                    <label for="loginEmail" class="form-label">Email</label>
+                    <input type="email" class="form-control" id="loginEmail" placeholder="you@example.com" required>
+                </div>
+                <div class="mb-3">
+                    <label for="loginPassword" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="loginPassword" placeholder="Enter your password" minlength="8" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Login</button>
+            </form>
+            <p class="text-center mt-3 mb-0">
+                New here?
+                <a href="{{ url_for('signup_page') }}">Create an account</a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

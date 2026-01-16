@@ -3,6 +3,26 @@
 {% block title %}Aqua Track: Water Quality Monitoring System - WQI Calculator{% endblock %}
 
 {% block content %}
+        <!-- What is WQI? -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card shadow-sm">
+                    <div class="card-body">
+                        <h2 class="h4 mb-2">What is WQI?</h2>
+                        <p class="mb-1">
+                            Water Quality Index (WQI) is a single score that quickly tells you how safe the water is.
+                        </p>
+                        <p class="mb-1">
+                            It combines temperature, pH, turbidity and other water parameters into one easy-to-read number.
+                        </p>
+                        <p class="mb-0">
+                            Lower scores mean cleaner, safer water. Higher scores mean the water may need more treatment.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="row">
 
             <!-- Input Card -->
@@ -44,32 +64,133 @@
             </div>
 
             <!-- Result Card -->
-            <div class="col-12 col-md-7">
+            <div class="col-12 col-md-7 mt-4 mt-md-0">
                 <div class="card shadow">
                     <div class="card-header bg-white">
                         <h4>Results</h4>
                     </div>
                     <div class="card-body text-center">
-                        <div class="chart-container" style="position: relative; height:200px; width:100%; display:flex; justify-content:center;">
-                             <canvas id="wqiChart"></canvas>
-                             <div id="scoreDisplay" style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); font-size: 2rem; font-weight: bold;">--</div>
-                        </div>
-                        
-                        <div class="mt-4">
-                            <h5>Status: <span id="statusBadge" class="badge bg-secondary">Unknown</span></h5>
+                        <!-- Large WQI Indicator with chart background -->
+                        <div class="chart-container mb-3" style="position: relative; height:200px; width:100%; display:flex; justify-content:center;">
+                            <canvas id="wqiChart"></canvas>
+                            <div id="wqiBadge" class="badge bg-secondary px-4 py-3"
+                                 style="position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); font-size: 2.2rem; font-weight: 700;">
+                                --
+                            </div>
                         </div>
 
+                        <!-- Status and simple safety message -->
+                        <div class="mt-2">
+                            <h5 class="mb-1">Status: <span id="statusBadge" class="badge bg-secondary">Unknown</span></h5>
+                            <p id="safetyMessage" class="mt-2 fs-5 fw-semibold">
+                                Enter your water values to see if this water is safe.
+                            </p>
+                        </div>
+
+                        <!-- Visual WQI scale bar -->
                         <div class="mt-4 text-start">
-                            <h5>WQI Scale:</h5>
-                            <ul class="list-group list-group-flush">
-                                <li class="list-group-item">🟢 0–25: Excellent</li>
-                                <li class="list-group-item">🔵 26–50: Good</li>
-                                <li class="list-group-item">🟡 51–75: Poor</li>
-                                <li class="list-group-item">🔴 76–100: Very Poor</li>
-                                <li class="list-group-item">⚫ >100: Unfit for Consumption</li>
-                            </ul>
+                            <h5 class="mb-2">WQI Scale</h5>
+                            <div class="wqi-scale position-relative mt-1">
+                                <div class="wqi-segment wqi-excellent">Excellent</div>
+                                <div class="wqi-segment wqi-good">Good</div>
+                                <div class="wqi-segment wqi-poor">Poor</div>
+                                <div class="wqi-segment wqi-very-poor">Very Poor</div>
+                                <div class="wqi-segment wqi-unfit">Unfit</div>
+                                <div id="wqiMarker" class="wqi-marker">▲</div>
+                            </div>
+                            <div class="d-flex justify-content-between small mt-1">
+                                <span>0</span>
+                                <span>25</span>
+                                <span>50</span>
+                                <span>75</span>
+                                <span>100+</span>
+                            </div>
                         </div>
 
+                        <!-- Icon-based parameter summary -->
+                        <div id="parameterSummary" class="mt-4 text-start d-none">
+                            <h5 class="mb-3">Your water at a glance</h5>
+                            <div class="row g-3">
+                                <div class="col-12 col-sm-6 col-lg-4">
+                                    <div class="card h-100 border-0 shadow-sm parameter-card">
+                                        <div class="card-body">
+                                            <div class="fs-3 mb-1">🧪</div>
+                                            <h6 class="mb-1">pH</h6>
+                                            <p class="mb-0"><span id="summaryPh">--</span></p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-sm-6 col-lg-4">
+                                    <div class="card h-100 border-0 shadow-sm parameter-card">
+                                        <div class="card-body">
+                                            <div class="fs-3 mb-1">💧</div>
+                                            <h6 class="mb-1">Dissolved Oxygen</h6>
+                                            <p class="mb-0"><span id="summaryDo">--</span> mg/L</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-sm-6 col-lg-4">
+                                    <div class="card h-100 border-0 shadow-sm parameter-card">
+                                        <div class="card-body">
+                                            <div class="fs-3 mb-1">🌫</div>
+                                            <h6 class="mb-1">Turbidity</h6>
+                                            <p class="mb-0"><span id="summaryTurbidity">--</span> NTU</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-sm-6 col-lg-4">
+                                    <div class="card h-100 border-0 shadow-sm parameter-card">
+                                        <div class="card-body">
+                                            <div class="fs-3 mb-1">🧂</div>
+                                            <h6 class="mb-1">TDS</h6>
+                                            <p class="mb-0"><span id="summaryTds">--</span> mg/L</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-sm-6 col-lg-4">
+                                    <div class="card h-100 border-0 shadow-sm parameter-card">
+                                        <div class="card-body">
+                                            <div class="fs-3 mb-1">🌿</div>
+                                            <h6 class="mb-1">Nitrate</h6>
+                                            <p class="mb-0"><span id="summaryNitrate">--</span> mg/L</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-sm-6 col-lg-4">
+                                    <div class="card h-100 border-0 shadow-sm parameter-card">
+                                        <div class="card-body">
+                                            <div class="fs-3 mb-1">🌡</div>
+                                            <h6 class="mb-1">Temperature</h6>
+                                            <p class="mb-0"><span id="summaryTemperature">--</span> °C</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Why is my WQI like this? -->
+                        <div class="mt-4 text-start">
+                            <button class="btn btn-outline-secondary w-100 text-start" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#wqiWhyCollapse" aria-expanded="false"
+                                    aria-controls="wqiWhyCollapse">
+                                Why is my WQI like this?
+                            </button>
+                            <div class="collapse mt-2" id="wqiWhyCollapse">
+                                <div class="card card-body">
+                                    <ul class="mb-0" id="wqiWhyList">
+                                        <li>Enter your values to see which parameters influence your WQI the most.</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Awareness note -->
+                        <div class="mt-4">
+                            <p class="small text-muted mb-0">
+                                This WQI is for awareness purposes and reflects the current data shown.
+                                Values may change with time and location.
+                            </p>
+                        </div>
                     </div>
                 </div>
             </div>

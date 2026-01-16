@@ -240,6 +240,18 @@ def map_page():
 def chatbot_page():
     return render_template("chatbot.html")
 
+@app.route('/login')
+def login_page():
+    return render_template("login.html")
+
+@app.route('/signup')
+def signup_page():
+    return render_template("signup.html")
+
+@app.route('/user-dashboard')
+def user_dashboard_page():
+    return render_template("user_dashboard.html")
+
 @app.route('/chat', methods=['POST'])
 def chat():
     payload = request.get_json(silent=True) or {}

@@ -5,6 +5,9 @@ const statTurbidity = document.getElementById('stat-turbidity');
 const lastUpdateEl = document.getElementById('last-update');
 const statWqi = document.getElementById('stat-wqi');
 const badgeWqi = document.getElementById('badge-wqi');
+const sensorSafetyEl = document.getElementById('sensor-safety');
+const wqiMarkerSensor = document.getElementById('wqi-marker-sensor');
+const sensorWhyList = document.getElementById('sensor-why-list');
 
 function formatIndianTimestamp(ts) {
   if (!ts) return '';
@@ -85,6 +88,9 @@ function renderStats(item) {
     statWqi.textContent = '—';
     badgeWqi.textContent = '—';
     badgeWqi.className = 'badge bg-secondary';
+    if (sensorSafetyEl) {
+      sensorSafetyEl.textContent = 'Waiting for data from the sensor…';
+    }
     return;
   }
   statTemp.textContent = item.temperature_c != null ? Number(item.temperature_c).toFixed(2) : '—';
@@ -104,6 +110,76 @@ function renderStats(item) {
   statWqi.textContent = wqi.toFixed(2);
   badgeWqi.textContent = s.status;
   badgeWqi.className = `badge bg-${s.color}`;
+  statWqi.className = `badge px-4 py-3 stat-value bg-${s.color}`;
+
+  if (sensorSafetyEl) {
+    if (wqi <= 25) {
+      sensorSafetyEl.textContent = '✅ Safe for daily use.';
+    } else if (wqi <= 50) {
+      sensorSafetyEl.textContent = '✅ Generally safe, with minor concerns.';
+    } else if (wqi <= 75) {
+      sensorSafetyEl.textContent = '⚠️ Use with caution. Consider treatment before drinking.';
+    } else if (wqi <= 100) {
+      sensorSafetyEl.textContent = '❌ Not safe for drinking without proper treatment.';
+    } else {
+      sensorSafetyEl.textContent = '❌ Not safe for drinking. Water quality is very poor.';
+    }
+  }
+
+  if (wqiMarkerSensor) {
+    const clamped = Math.max(0, Math.min(wqi, 120));
+    const position = (clamped / 120) * 100;
+    wqiMarkerSensor.style.left = position + '%';
+  }
+
+  if (sensorWhyList) {
+    sensorWhyList.innerHTML = '';
+    const ideal = {
+      temperature_c: 25.0,
+      ph: 7.0,
+      turbidity: 1.0
+    };
+    const differences = [
+      {
+        key: 'temperature_c',
+        label: 'Temperature',
+        score: item.temperature_c != null ? Math.abs(Number(item.temperature_c) - ideal.temperature_c) / 2.0 : 0
+      },
+      {
+        key: 'ph',
+        label: 'pH',
+        score: item.ph != null ? Math.abs(Number(item.ph) - ideal.ph) : 0
+      },
+      {
+        key: 'turbidity',
+        label: 'Turbidity',
+        score: item.turbidity != null ? Math.max(0, Number(item.turbidity) - ideal.turbidity) : 0
+      }
+    ];
+
+    differences.sort((a, b) => b.score - a.score);
+    const topIssues = differences.filter(d => d.score > 0.1).slice(0, 3);
+
+    if (topIssues.length === 0) {
+      const li = document.createElement('li');
+      li.textContent = 'Current sensor readings are close to comfortable levels for clean water.';
+      sensorWhyList.appendChild(li);
+    } else {
+      topIssues.forEach(issue => {
+        const li = document.createElement('li');
+        if (issue.key === 'temperature_c') {
+          li.textContent = 'The water temperature is away from the comfortable range, which can affect how healthy the water feels.';
+        } else if (issue.key === 'ph') {
+          li.textContent = item.ph > ideal.ph
+            ? 'The pH is higher than the ideal level, making the water slightly more basic.'
+            : 'The pH is lower than the ideal level, making the water slightly more acidic.';
+        } else if (issue.key === 'turbidity') {
+          li.textContent = 'The water looks more cloudy (higher turbidity), which can indicate tiny floating particles.';
+        }
+        sensorWhyList.appendChild(li);
+      });
+    }
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
