@@ -12,8 +12,7 @@ A full-stack Flask application to compute, visualize, and manage Water Quality I
 - Login, Signup, and User Dashboard pages with client-side auth on `/login`, `/signup`, `/user-dashboard`.
 - CSV/Excel export including temperature via `/download_excel`.
 - Auto-migration that adds a `temperature` column for backward compatibility.
-- Consistent 5-tier WQI scale and colors across UI and APIs.
-- Animated moving water background with high-contrast content layer.
+
 
 **Project Structure**
 - `app.py` — Flask app, models, routes, APIs, WQI and status logic.
