@@ -1,0 +1,55 @@
+{
+  "wqi": {
+    "ideal": {
+      "ph": 7.0,
+      "do": 14.6,
+      "turbidity": 0.0,
+      "tds": 0.0,
+      "nitrate": 0.0,
+      "temperature": 25.0
+    },
+    "standard": {
+      "ph": 8.5,
+      "do": 5.0,
+      "turbidity": 5.0,
+      "tds": 500.0,
+      "nitrate": 45.0,
+      "temperature": 30.0
+    },
+    "status_thresholds": [
+      { "max": 25, "status": "Excellent", "color": "success", "hex": "#28a745" },
+      { "max": 50, "status": "Good", "color": "primary", "hex": "#0d6efd" },
+      { "max": 75, "status": "Poor", "color": "warning", "hex": "#ffc107" },
+      { "max": 100, "status": "Very Poor", "color": "danger", "hex": "#dc3545" },
+      { "max": null, "status": "Unfit for Consumption", "color": "dark", "hex": "#343a40" }
+    ],
+    "chart": {
+      "baseline": 150,
+      "remainder_color": "#e9ecef",
+      "cutout_percent": 60
+    },
+    "scale_max": 120,
+    "poll_interval_ms": 5000,
+    "messages": {
+      "success": "✅ Safe for daily use.",
+      "primary": "✅ Generally safe, with minor concerns.",
+      "warning": "⚠️ Use with caution. Consider treatment before drinking.",
+      "danger": "❌ Not safe for drinking without proper treatment.",
+      "dark": "❌ Not safe for drinking. Water quality is very poor.",
+      "secondary": "Waiting for data…"
+    }
+  },
+  "map": {
+    "default_center": { "lat": 20.5937, "lng": 78.9629 },
+    "default_zoom": 5,
+    "click_zoom": 10
+  },
+  "colors": {
+    "success": "#28a745",
+    "primary": "#0d6efd",
+    "warning": "#ffc107",
+    "danger": "#dc3545",
+    "dark": "#343a40",
+    "secondary": "#6c757d"
+  }
+}

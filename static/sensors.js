@@ -1,18 +1,19 @@
-const containerEl = document.getElementById('sensor-container');
-const statTemp = document.getElementById('stat-temp');
-const statPh = document.getElementById('stat-ph');
-const statTurbidity = document.getElementById('stat-turbidity');
-const lastUpdateEl = document.getElementById('last-update');
-const statWqi = document.getElementById('stat-wqi');
-const badgeWqi = document.getElementById('badge-wqi');
-const sensorSafetyEl = document.getElementById('sensor-safety');
-const wqiMarkerSensor = document.getElementById('wqi-marker-sensor');
-const sensorWhyList = document.getElementById('sensor-why-list');
+let CONFIG = null; // configuration loaded from backend
+const containerEl = document.getElementById('sensor-container'); // card container for sensor UI
+const statTemp = document.getElementById('stat-temp'); // temperature value label
+const statPh = document.getElementById('stat-ph'); // pH value label
+const statTurbidity = document.getElementById('stat-turbidity'); // turbidity value label
+const lastUpdateEl = document.getElementById('last-update'); // text showing last update time
+const statWqi = document.getElementById('stat-wqi'); // WQI numeric badge
+const badgeWqi = document.getElementById('badge-wqi'); // status text badge
+const sensorSafetyEl = document.getElementById('sensor-safety'); // safety message paragraph
+const wqiMarkerSensor = document.getElementById('wqi-marker-sensor'); // triangle marker on scale
+const sensorWhyList = document.getElementById('sensor-why-list'); // list explaining WQI factors
 
 function formatLocalTimestamp(ts) {
   if (!ts) return '';
-  const iso = ts.endsWith('Z') ? ts : ts + 'Z';
-  const d = new Date(iso);
+  const iso = ts.endsWith('Z') ? ts : ts + 'Z'; // ensure UTC format for Date
+  const d = new Date(iso); // parse into Date object
   const fmt = new Intl.DateTimeFormat(undefined, {
     year: 'numeric',
     month: '2-digit',
@@ -27,19 +28,19 @@ function formatLocalTimestamp(ts) {
 
 async function fetchLatest() {
   try {
-    const res = await fetch('/api/iot');
+    const res = await fetch('/api/iot'); // request latest IoT reading
     if (!res.ok) {
-      containerEl.classList.add('d-none');
-      lastUpdateEl.textContent = 'Waiting for data…';
+      containerEl.classList.add('d-none'); // hide content when no data
+      lastUpdateEl.textContent = 'Waiting for data…'; // show placeholder text
       return;
     }
-    const item = await res.json();
-    await renderStats(item);
-    containerEl.classList.remove('d-none');
-    lastUpdateEl.textContent = `Last update: ${formatLocalTimestamp(item.timestamp)}`;
+    const item = await res.json(); // parse JSON payload
+    await renderStats(item); // render stats from payload
+    containerEl.classList.remove('d-none'); // show content
+    lastUpdateEl.textContent = `Last update: ${formatLocalTimestamp(item.timestamp)}`; // human readable time
   } catch (e) {
-    containerEl.classList.add('d-none');
-    lastUpdateEl.textContent = 'Waiting for data…';
+    containerEl.classList.add('d-none'); // hide if request fails
+    lastUpdateEl.textContent = 'Waiting for data…'; // show placeholder text
   }
 }
 
@@ -52,7 +53,8 @@ async function renderStats(item) {
     badgeWqi.textContent = '—';
     badgeWqi.className = 'badge bg-secondary';
     if (sensorSafetyEl) {
-      sensorSafetyEl.textContent = 'Waiting for data from the sensor…';
+      const msg = (CONFIG && CONFIG.wqi && CONFIG.wqi.messages) ? CONFIG.wqi.messages.secondary : 'Waiting for data…';
+      sensorSafetyEl.textContent = msg || '';
     }
     return;
   }
@@ -60,25 +62,25 @@ async function renderStats(item) {
   statPh.textContent = item.ph != null ? Number(item.ph).toFixed(2) : '—';
   const turb = item.turbidity;
   statTurbidity.textContent = turb != null ? Number(turb).toFixed(2) : '—';
-  let wqi = null;
-  let status = '—';
-  let color = 'secondary';
+  let wqi = null; // computed WQI result
+  let status = '—'; // status text
+  let color = 'secondary'; // bootstrap color name
   try {
     const payload = {
       ph: item.ph != null ? Number(item.ph) : undefined,
       turbidity: turb != null ? Number(turb) : undefined,
       temperature: item.temperature_c != null ? Number(item.temperature_c) : undefined
     };
-    const res = await fetch('/calculate', {
+    const res = await fetch('/calculate', { // request backend to compute WQI from sensor values
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     });
     if (res.ok) {
-      const out = await res.json();
-      wqi = out.wqi;
-      status = out.status;
-      color = out.color;
+      const out = await res.json(); // parse result
+      wqi = out.wqi; // numeric score
+      status = out.status; // status label text
+      color = out.color; // bootstrap color class
     }
   } catch (e) {}
   statWqi.textContent = wqi != null ? Number(wqi).toFixed(2) : '—';
@@ -88,32 +90,29 @@ async function renderStats(item) {
 
   if (sensorSafetyEl) {
     if (wqi == null) {
-      sensorSafetyEl.textContent = 'Waiting for data from the sensor…';
-    } else if (color === 'success') {
-      sensorSafetyEl.textContent = '✅ Safe for daily use.';
-    } else if (color === 'primary') {
-      sensorSafetyEl.textContent = '✅ Generally safe, with minor concerns.';
-    } else if (color === 'warning') {
-      sensorSafetyEl.textContent = '⚠️ Use with caution. Consider treatment before drinking.';
-    } else if (color === 'danger') {
-      sensorSafetyEl.textContent = '❌ Not safe for drinking without proper treatment.';
+      const msg = (CONFIG && CONFIG.wqi && CONFIG.wqi.messages) ? CONFIG.wqi.messages.secondary : 'Waiting for data…';
+      sensorSafetyEl.textContent = msg || '';
     } else {
-      sensorSafetyEl.textContent = '❌ Not safe for drinking. Water quality is very poor.';
+      const messages = (CONFIG && CONFIG.wqi && CONFIG.wqi.messages) ? CONFIG.wqi.messages : null;
+      const text = messages ? messages[color] : '';
+      sensorSafetyEl.textContent = text || '';
     }
   }
 
   if (wqiMarkerSensor) {
-    const clamped = wqi != null ? Math.max(0, Math.min(Number(wqi), 120)) : 0;
-    const position = (clamped / 120) * 100;
+    const scaleMax = (CONFIG && CONFIG.wqi && CONFIG.wqi.scale_max) ? CONFIG.wqi.scale_max : 120;
+    const clamped = wqi != null ? Math.max(0, Math.min(Number(wqi), scaleMax)) : 0; // clamp into scale range
+    const position = (clamped / scaleMax) * 100; // compute marker position
     wqiMarkerSensor.style.left = position + '%';
   }
 
   if (sensorWhyList) {
     sensorWhyList.innerHTML = '';
+    const idealCfg = (CONFIG && CONFIG.wqi && CONFIG.wqi.ideal) ? CONFIG.wqi.ideal : { temperature: 25.0, ph: 7.0, turbidity: 0.0 };
     const ideal = {
-      temperature_c: 25.0,
-      ph: 7.0,
-      turbidity: 1.0
+      temperature_c: idealCfg.temperature,
+      ph: idealCfg.ph,
+      turbidity: idealCfg.turbidity
     };
     const differences = [
       {
@@ -159,6 +158,15 @@ async function renderStats(item) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  fetchLatest();
-  setInterval(fetchLatest, 5000);
+  (async () => {
+    try {
+      const res = await fetch('/config'); // load configuration before starting polling
+      CONFIG = await res.json(); // parse config JSON
+    } catch (e) {
+      CONFIG = {}; // fallback to defaults
+    }
+    fetchLatest(); // get first datapoint
+    const interval = (CONFIG && CONFIG.wqi && CONFIG.wqi.poll_interval_ms) ? CONFIG.wqi.poll_interval_ms : 5000; // polling interval ms
+    setInterval(fetchLatest, interval); // start automatic polling
+  })();
 });

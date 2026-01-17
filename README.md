@@ -130,6 +130,7 @@ root
   - 51–75 Poor (`warning`)
   - 76–100 Very Poor (`danger`)
   - >100 Unfit (`dark`)
+ - UI: calculator badge background matches status color; semi-pie chart is larger.
 
 **UI and UX**
 - `layout.html` provides navbar, global animated background, and high-contrast content container.
@@ -137,24 +138,12 @@ root
 - Map markers colored by WQI status (`static/map.js`).
 - Chatbot cleans model outputs and enforces send delay (`static/chatbot.js`).
 
-**APIs and Pages**
-- Pages:
-  - `/` calculator
-  - `/dashboard` dashboard
-  - `/map` map
-  - `/data` database view
-  - `/chatbot.html` chatbot view
-  - `/sensors` latest IoT readings with WQI
-  - `/login`, `/signup`, `/user-dashboard` auth pages (client-side)
-- APIs:
-  - `POST /calculate` returns `wqi`, `status`, `color`.
-  - `GET /api/locations` latest WQI per location.
-  - `GET /api/wqi?lat&lng` nearest location WQI.
-  - `POST /api/iot` ingest IoT readings JSON (`temperature_c` required; optional `ph`, `turbidity_ntu`/`turbidity_percent`).
-  - `GET /api/iot` latest IoT reading; 404 when empty.
-  - CRUD: `/data/location`, `/data/location/<id>/delete`, `/data/sample`, `/data/sample/<id>/update`.
-  - Export: `GET /download_excel`.
-  - Chat: `POST /chat` using Hugging Face Router.
+**APIs Summary**
+- `POST /calculate` → `{ wqi, status, color }`
+- `GET /api/locations` → list of locations with latest WQI + references
+- `GET /api/wqi?lat&lng` → nearest location’s WQI
+- `GET /api/iot` / `POST /api/iot` → latest/ingest IoT readings
+- `GET /download_excel` → CSV/XLSX export of data and static references
 
 **Deployment**
 - Local SQLite for development; prefer managed Postgres in production.

@@ -14,11 +14,23 @@ from flask import send_file
 import json
 
 # --- Application Setup ---
-app = Flask(__name__)
+app = Flask(__name__)  # create the Flask web application
 BASE_DIR = os.path.dirname(__file__)
 DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "wqi.db")
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
+CONFIG = {}
+
+def load_config():
+    global CONFIG
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:  # open config.json from project root
+            CONFIG = json.load(f) or {}  # parse JSON into a Python dict; default to empty if file is blank
+    except Exception:
+        CONFIG = {}  # if config fails to load, keep an empty dict so code can use safe defaults
+
+load_config()
 
 # Default to SQLite
 sqlite_uri = f"sqlite:///{DB_PATH}"
@@ -42,6 +54,7 @@ db = SQLAlchemy(app)
 iot_lock = threading.Lock()
 
 def seed_reference_locations():
+    # load static reference locations from JSON and insert into the database if missing
     try:
         static_path = os.path.join(DATA_DIR, "static_wb.json")
         if not os.path.exists(static_path):
@@ -52,7 +65,7 @@ def seed_reference_locations():
         for item in items:
             name = item.get("name")
             location = item.get("location")
-            exists = ReferenceLocation.query.filter_by(name=name, location=location).first()
+            exists = ReferenceLocation.query.filter_by(name=name, location=location).first()  # skip duplicates
             if exists:
                 continue
             rec = ReferenceLocation(
@@ -64,10 +77,10 @@ def seed_reference_locations():
                 status=item.get("status"),
                 category=item.get("category")
             )
-            db.session.add(rec)
+            db.session.add(rec)  # stage the new row for insert
             created += 1
         if created:
-            db.session.commit()
+            db.session.commit()  # write inserts to the database
             print(f"Seeded {created} reference locations from static_wb.json")
     except Exception as e:
         print(f"Reference seed error: {e}")
@@ -75,6 +88,7 @@ def seed_reference_locations():
 # --- ORM Models ---
 class Location(db.Model):
     __tablename__ = "locations"
+    # stores a named lat/long and relates to multiple water samples
     id = db.Column(db.Integer, primary_key=True)
     latitude = db.Column(db.Float, nullable=False, index=True)
     longitude = db.Column(db.Float, nullable=False, index=True)
@@ -83,6 +97,7 @@ class Location(db.Model):
 
 class WaterSample(db.Model):
     __tablename__ = "water_samples"
+    # stores one set of water readings for a location at a point in time
     id = db.Column(db.Integer, primary_key=True)
     location_id = db.Column(db.Integer, db.ForeignKey("locations.id"), nullable=False, index=True)
     ph = db.Column(db.Float, nullable=True)
@@ -96,6 +111,7 @@ class WaterSample(db.Model):
 
 class IoTReading(db.Model):
     __tablename__ = "iot_readings"
+    # raw readings posted by an IoT device (ESP32)
     id = db.Column(db.Integer, primary_key=True)
     temperature_c = db.Column(db.Float, nullable=False)
     turbidity_percent = db.Column(db.Float, nullable=False)
@@ -105,6 +121,7 @@ class IoTReading(db.Model):
 
 class ReferenceLocation(db.Model):
     __tablename__ = "reference_locations"
+    # static reference points with precomputed WQI and labels
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     location = db.Column(db.String(255), nullable=False)
@@ -116,7 +133,7 @@ class ReferenceLocation(db.Model):
 
 with app.app_context():
     try:
-        db.create_all()
+        db.create_all()  # ensure tables exist
         inspector = inspect(db.engine)
         if inspector.has_table("water_samples"):
             columns = [col['name'] for col in inspector.get_columns('water_samples')]
@@ -145,7 +162,7 @@ with app.app_context():
                         print("Migration successful.")
                     except Exception as e:
                         print(f"Migration warning (turbidity_ntu): {e}")
-        seed_reference_locations()
+        seed_reference_locations()  # insert static locations from JSON
     except Exception as e:
         print(f"Error creating/migrating tables: {e}")
 
@@ -171,63 +188,56 @@ def calculate_wqi(data):
     - float: Water Quality Index (rounded to 2 decimals), or None if no valid data.
     """
 
-    # 1) Ideal values (Vi); ideal = 0 for most parameters except pH & DO
-    IDEAL = {
+    cfg_wqi = CONFIG.get("wqi", {})  # read WQI portion of config
+    IDEAL = cfg_wqi.get("ideal", {  # ideal target values for each parameter
         "ph": 7.0,
         "do": 14.6,
         "turbidity": 0.0,
         "tds": 0.0,
         "nitrate": 0.0,
         "temperature": 25.0,
-    }
-
-    # 2) Standard (permissible) values (Vs) (e.g., based on BIS/WHO for drinking water)
-    STANDARD = {
+    })
+    STANDARD = cfg_wqi.get("standard", {  # permissible standard values for each parameter
         "ph": 8.5,
         "do": 5.0,
         "turbidity": 5.0,
         "tds": 500.0,
         "nitrate": 45.0,
         "temperature": 30.0,
-    }
+    })
 
     # 3) Proportionality constant K
     try:
-        K = 1 / sum(1 / v for v in STANDARD.values())
+        K = 1 / sum(1 / v for v in STANDARD.values())  # proportionality constant using standards
     except ZeroDivisionError:
         return None
 
     total_qw = 0.0
     total_w = 0.0
 
-    for param in STANDARD:
+    for param in STANDARD:  # iterate each parameter (ph, do, turbidity, etc.)
         if param not in data or data[param] is None:
             continue
 
         try:
-            # Observed value
-            Vo = float(data[param])
-            Vi = IDEAL[param]
-            Vs = STANDARD[param]
+            Vo = float(data[param])  # observed value from input
+            Vi = IDEAL[param]        # ideal target value
+            Vs = STANDARD[param]     # permissible standard value
 
-            # Unit weight
-            Wi = K / Vs
+            Wi = K / Vs  # unit weight for this parameter
 
-            # Quality rating (Qi)
+            # quality rating Qi: how far the observed value is from ideal/standard
             if param == "do":
-                # DO: higher is better up to ideal
-                Qi = (Vi - Vo) / (Vi - Vs) * 100
+                Qi = (Vi - Vo) / (Vi - Vs) * 100  # for DO, lower than ideal is worse
             elif param in ["ph", "temperature"]:
-                # pH and temperature: deviation from ideal, both directions matter
-                Qi = abs(Vo - Vi) / (Vs - Vi) * 100
+                Qi = abs(Vo - Vi) / (Vs - Vi) * 100  # absolute deviation from ideal
             else:
-                # Normal parameters: higher than ideal is worse
-                Qi = (Vo - Vi) / (Vs - Vi) * 100
+                Qi = (Vo - Vi) / (Vs - Vi) * 100  # higher than ideal indicates worse quality
 
-            Qi = max(0.0, Qi)
+            Qi = max(0.0, Qi)  # clamp negative to zero
 
-            total_qw += Qi * Wi
-            total_w += Wi
+            total_qw += Qi * Wi  # accumulate Qi weighted
+            total_w += Wi        # accumulate weights
 
         except (ValueError, TypeError, ZeroDivisionError):
             continue
@@ -235,8 +245,7 @@ def calculate_wqi(data):
     if total_w == 0:
         return None
 
-    # 4) Final WQI value
-    return round(total_qw / total_w, 2)
+    return round(total_qw / total_w, 2)  # weighted average -> final WQI
 
 
 def get_status(wqi):
@@ -248,17 +257,24 @@ def get_status(wqi):
     """
 
     if wqi is None:
-        return "No Data", "secondary"
-    if wqi <= 25:
-        return "Excellent", "success"
-    elif wqi <= 50:
-        return "Good", "primary"
-    elif wqi <= 75:
-        return "Poor", "warning"
-    elif wqi <= 100:
-        return "Very Poor", "danger"
-    else:
-        return "Unfit for Consumption", "dark"
+        return "No Data", "secondary"  # no score -> show secondary
+    thresholds = CONFIG.get("wqi", {}).get("status_thresholds")  # pick thresholds from config
+    if not thresholds:
+        if wqi <= 25:
+            return "Excellent", "success"
+        elif wqi <= 50:
+            return "Good", "primary"
+        elif wqi <= 75:
+            return "Poor", "warning"
+        elif wqi <= 100:
+            return "Very Poor", "danger"
+        else:
+            return "Unfit for Consumption", "dark"
+    for t in thresholds:  # find the first threshold bucket matching this wqi
+        mx = t.get("max")
+        if mx is None or wqi <= float(mx):
+            return t.get("status") or "Unknown", t.get("color") or "secondary"
+    return "Unknown", "secondary"
 
 # --- Utility: Haversine distance (km) ---
 def haversine_distance(lat1, lng1, lat2, lng2):
@@ -272,7 +288,7 @@ def haversine_distance(lat1, lng1, lat2, lng2):
 # --- Routes ---
 @app.route('/')
 def home():
-    google_maps_key = os.environ.get("GOOGLE_MAPS_API_KEY")
+    google_maps_key = os.environ.get("GOOGLE_MAPS_API_KEY")  # pass Google Maps key from environment to template
     return render_template(
         "index.html",
         google_maps_key=google_maps_key
@@ -284,7 +300,7 @@ def dashboard():
 
 @app.route('/map')
 def map_page():
-    google_maps_key = os.environ.get("GOOGLE_MAPS_API_KEY")
+    google_maps_key = os.environ.get("GOOGLE_MAPS_API_KEY")  # used by the map template to load Google Maps
     return render_template("map.html", google_maps_key=google_maps_key)
 
 @app.route('/chatbot.html')
@@ -305,12 +321,12 @@ def user_dashboard_page():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}  # read JSON body with user's message
     user_message = (payload.get("message") or "").strip()
     if not user_message:
         return jsonify({"error": "Please provide a question in 'message'"}), 400
 
-    token = os.environ.get("HUGGING_FACE_API_TOKEN")
+    token = os.environ.get("HUGGING_FACE_API_TOKEN")  # token must be set as env var
     if not token:
         return jsonify({"error": "Server is not configured with Hugging Face token"}), 500
 
@@ -319,10 +335,10 @@ def chat():
         "Keep your answers compact and brief yet logical and meaningful, ensuring the user gets a complete answer without being cut off. "
         "Do not include your internal chain of thought or reasoning process in the final output, only the response to the user."
     )
-    model_id = os.environ.get("HF_CHAT_MODEL", "HuggingFaceTB/SmolLM3-3B:hf-inference")
-    fallback_model = "HuggingFaceTB/SmolLM3-3B:hf-inference"
+    model_id = os.environ.get("HF_CHAT_MODEL", "HuggingFaceTB/SmolLM3-3B:hf-inference")  # primary chat model
+    fallback_model = "HuggingFaceTB/SmolLM3-3B:hf-inference"  # fallback if primary fails
     try:
-        resp = requests.post(
+        resp = requests.post(  # call Hugging Face chat completions
             "https://router.huggingface.co/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {token}",
@@ -416,14 +432,14 @@ def chat():
     if finish_reason == "length":
         content += "\n\n(Note: My response was cut off because it reached the maximum length.)"
 
-    return jsonify({"reply": content})
+    return jsonify({"reply": content})  # return cleaned model output to the UI
 
 @app.route('/data')
 def data_page():
-    locations = Location.query.all()
+    locations = Location.query.all()  # read all locations
     rows = []
     for loc in locations:
-        sample = (WaterSample.query
+        sample = (WaterSample.query  # fetch most recent sample for the location
                   .filter_by(location_id=loc.id)
                   .order_by(WaterSample.timestamp.desc())
                   .first())
@@ -431,7 +447,7 @@ def data_page():
             data = {"ph": sample.ph, "do": sample.do, "tds": sample.tds, "turbidity": sample.turbidity, "nitrate": sample.nitrate, "temperature": sample.temperature}
             sample.wqi = calculate_wqi(data)
             db.session.commit()
-        wqi_val = sample.wqi if sample else None
+        wqi_val = sample.wqi if sample else None  # may be None if no sample exists
         status, color = get_status(wqi_val) if wqi_val is not None else ("No Data", "secondary")
         rows.append({
             "name": loc.name or "Unnamed",
@@ -455,7 +471,7 @@ def data_page():
 
 @app.route('/download_excel')
 def download_excel():
-    locations = Location.query.all()
+    locations = Location.query.all()  # pull all data to export
     data_list = []
     
     # User Data
@@ -531,8 +547,8 @@ def download_excel():
 
 @app.route('/calculate', methods=['POST'])
 def calculate():
-    data = request.json
-    score = calculate_wqi(data)
+    data = request.json  # parse input parameters for WQI calculation
+    score = calculate_wqi(data)  # compute WQI
     status, color = get_status(score)
     return jsonify({
         "wqi": score,
@@ -542,7 +558,7 @@ def calculate():
 
 @app.route('/api/locations', methods=['GET'])
 def api_locations():
-    locations = Location.query.all()
+    locations = Location.query.all()  # list all locations with latest WQI
     output = []
     
     # User added locations
@@ -558,7 +574,7 @@ def api_locations():
                 sample.wqi = calculate_wqi(data)
                 db.session.commit()
             wqi_val = sample.wqi
-        status, color = get_status(wqi_val) if wqi_val is not None else ("No Data", "secondary")
+        status, color = get_status(wqi_val) if wqi_val is not None else ("No Data", "secondary")  # derive status from WQI
         output.append({
             "name": loc.name,
             "latitude": loc.latitude,
@@ -580,11 +596,11 @@ def api_locations():
             "color": color
         })
 
-    return jsonify(output)
+    return jsonify(output)  # send combined list (user + reference)
 
 @app.route('/data/location', methods=['POST'])
 def create_location():
-    name = request.form.get("name") or None
+    name = request.form.get("name") or None  # optional name
     try:
         latitude = float(request.form.get("latitude"))
         longitude = float(request.form.get("longitude"))
@@ -621,7 +637,7 @@ def create_sample():
         "temperature": f("temperature"),
     }
     sample = WaterSample(location_id=loc.id, **payload)
-    sample.wqi = calculate_wqi(payload)
+    sample.wqi = calculate_wqi(payload)  # compute and store WQI for the sample
     db.session.add(sample)
     db.session.commit()
     return jsonify({"status": "ok", "sample_id": sample.id}), 200
@@ -652,7 +668,7 @@ def delete_sample(sample_id):
 
 @app.route('/api/iot', methods=['POST', 'GET'])
 def ingest_iot():
-    if request.method == 'GET':
+    if request.method == 'GET':  # return latest IoT reading
         latest = (IoTReading.query
                   .order_by(IoTReading.timestamp.desc())
                   .first())
@@ -668,7 +684,7 @@ def ingest_iot():
             payload["turbidity"] = round(float(turb_val), 2)
         payload["timestamp"] = latest.timestamp.isoformat()
         return jsonify(payload)
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True) or {}  # parse POSTed IoT reading
     # Parse temperature
     try:
         temperature_c = float(payload.get("temperature_c"))
@@ -705,7 +721,7 @@ def ingest_iot():
     # If percent missing, mirror from NTU to keep non-null constraint
     if turbidity_percent_val is None and turbidity_ntu_val is not None:
         turbidity_percent_val = turbidity_ntu_val
-    ts = datetime.utcnow()
+    ts = datetime.utcnow()  # record time of ingestion
     rec = IoTReading(
         temperature_c=temperature_c,
         turbidity_percent=turbidity_percent_val,
@@ -718,7 +734,7 @@ def ingest_iot():
     csv_path = os.path.join(DATA_DIR, "iot.csv")
     write_header = not os.path.exists(csv_path)
     with iot_lock:
-        with open(csv_path, "a", newline="") as f:
+        with open(csv_path, "a", newline="") as f:  # also append to a CSV for quick inspection
             writer = csv.writer(f)
             if write_header:
                 writer.writerow(["id", "temperature_c", "ph", "turbidity_percent", "turbidity_ntu", "timestamp"])
@@ -729,6 +745,10 @@ def ingest_iot():
 def sensors_page():
     return render_template("sensors.html")
 
+@app.route('/config', methods=['GET'])
+def get_config():
+    return jsonify(CONFIG or {})  # expose current config to frontend
+
 @app.route('/api/wqi', methods=['GET'])
 def api_wqi():
     try:
@@ -737,14 +757,14 @@ def api_wqi():
     except (TypeError, ValueError):
         return jsonify({"error": "Invalid or missing lat/lng"}), 400
 
-    locations = Location.query.all()
+    locations = Location.query.all()  # choose the nearest stored location to the clicked point
     if not locations:
         return jsonify({"error": "No locations available"}), 404
 
     nearest = None
     nearest_dist = float("inf")
     for loc in locations:
-        dist = haversine_distance(lat, lng, loc.latitude, loc.longitude)
+        dist = haversine_distance(lat, lng, loc.latitude, loc.longitude)  # compute great-circle distance (km)
         if dist < nearest_dist:
             nearest = loc
             nearest_dist = dist
@@ -767,7 +787,7 @@ def api_wqi():
             "turbidity": sample.turbidity,
             "nitrate": sample.nitrate
         }
-        sample.wqi = calculate_wqi(data)
+        sample.wqi = calculate_wqi(data)  # compute WQI if missing
         db.session.commit()
 
     status, color = get_status(sample.wqi)
@@ -787,4 +807,4 @@ if __name__ == "__main__":
             seed_reference_locations()
         except Exception as e:
             print(f"Startup seed failed: {e}")
-    app.run(debug=True)
+    app.run(debug=True)  # run the development server

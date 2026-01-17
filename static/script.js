@@ -1,32 +1,54 @@
-const ctx = document.getElementById('wqiChart').getContext('2d');
-
-let wqiChart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-        labels: ['Current Score', 'Remaining'],
-        datasets: [{
-            data: [0, 150],
-            backgroundColor: ['#e9ecef', '#e9ecef'],
-            borderWidth: 0
-        }]
-    },
-    options: {
-        rotation: -90,
-        circumference: 180,
-        cutout: '70%',
-        plugins: {
-            legend: { display: false },
-            tooltip: { enabled: false }
-        }
+let CONFIG = null; // configuration loaded from the server
+let wqiChart = null; // Chart.js instance for the semi-pie
+const ctx = document.getElementById('wqiChart').getContext('2d'); // canvas drawing context
+function colorHexByBootstrap(name) {
+    if (!CONFIG || !CONFIG.colors) return '#343a40'; // default dark if config missing
+    return CONFIG.colors[name] || '#343a40'; // lookup hex color by bootstrap name
+}
+function getSafetyMessageByColor(color) {
+    const messages = CONFIG && CONFIG.wqi && CONFIG.wqi.messages ? CONFIG.wqi.messages : null; // safety messages from config
+    if (!messages) return '';
+    return messages[color] || ''; // message for the current status color
+}
+async function initConfigAndChart() {
+    try {
+        const res = await fetch('/config'); // fetch config from backend
+        CONFIG = await res.json(); // parse JSON config
+    } catch (e) {
+        CONFIG = {}; // keep defaults if request fails
     }
-});
+    const baseline = CONFIG && CONFIG.wqi && CONFIG.wqi.chart ? CONFIG.wqi.chart.baseline : 150; // total ring size
+    const remainderColor = CONFIG && CONFIG.wqi && CONFIG.wqi.chart ? CONFIG.wqi.chart.remainder_color : '#e9ecef'; // background ring color
+    const cutoutPercent = CONFIG && CONFIG.wqi && CONFIG.wqi.chart ? CONFIG.wqi.chart.cutout_percent : 60; // hole size in donut
+    wqiChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Current Score', 'Remaining'],
+            datasets: [{
+                data: [0, baseline],
+                backgroundColor: [remainderColor, remainderColor],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            rotation: -90, // start from top
+            circumference: 180, // draw half circle
+            cutout: cutoutPercent + '%', // inner radius
+            plugins: {
+                legend: { display: false }, // hide legend
+                tooltip: { enabled: false } // disable tooltips
+            }
+        }
+    });
+}
+initConfigAndChart();
 
-const wqiForm = document.getElementById('wqiForm');
-const wqiBadge = document.getElementById('wqiBadge');
-const statusBadge = document.getElementById('statusBadge');
-const safetyMessage = document.getElementById('safetyMessage');
-const wqiMarker = document.getElementById('wqiMarker');
-const parameterSummary = document.getElementById('parameterSummary');
+const wqiForm = document.getElementById('wqiForm'); // form element users submit
+const wqiBadge = document.getElementById('wqiBadge'); // large numeric badge over chart
+const statusBadge = document.getElementById('statusBadge'); // text badge showing status
+const safetyMessage = document.getElementById('safetyMessage'); // short guidance text
+const wqiMarker = document.getElementById('wqiMarker'); // triangle marker on horizontal scale
+const parameterSummary = document.getElementById('parameterSummary'); // summary card grid
 
 const summaryPh = document.getElementById('summaryPh');
 const summaryDo = document.getElementById('summaryDo');
@@ -36,26 +58,15 @@ const summaryNitrate = document.getElementById('summaryNitrate');
 const summaryTemperature = document.getElementById('summaryTemperature');
 const wqiWhyList = document.getElementById('wqiWhyList');
 
-function getRangeColor(wqi) {
-    if (wqi <= 25) return '#28a745';      // green
-    if (wqi <= 50) return '#0d6efd';      // blue
-    if (wqi <= 75) return '#ffc107';      // yellow
-    if (wqi <= 100) return '#dc3545';     // red
-    return '#343a40';                     // black
-}
-
-function getSafetyMessage(wqi) {
-    if (wqi <= 25) return "✅ Safe for daily use.";
-    if (wqi <= 50) return "✅ Generally safe, with minor concerns.";
-    if (wqi <= 75) return "⚠️ Use with caution. Consider treatment before drinking.";
-    if (wqi <= 100) return "❌ Not safe for drinking without proper treatment.";
-    return "❌ Not safe for drinking. Water quality is very poor.";
+function getSafetyMessage(color) {
+    return getSafetyMessageByColor(color) || ''; // resolve safety text based on status color
 }
 
 function updateScaleMarker(wqi) {
     if (!wqiMarker) return;
-    const clamped = Math.max(0, Math.min(wqi, 120));
-    const position = (clamped / 120) * 100;
+    const scaleMax = CONFIG && CONFIG.wqi && CONFIG.wqi.scale_max ? CONFIG.wqi.scale_max : 120; // right end value
+    const clamped = Math.max(0, Math.min(wqi, scaleMax)); // clamp WQI into [0, scaleMax]
+    const position = (clamped / scaleMax) * 100; // percent from left
     wqiMarker.style.left = position + "%";
 }
 
@@ -74,10 +85,10 @@ function updateWhyList(values) {
     if (!wqiWhyList) return;
     wqiWhyList.innerHTML = "";
 
-    const ideal = {
+    const ideal = (CONFIG && CONFIG.wqi && CONFIG.wqi.ideal) ? CONFIG.wqi.ideal : {
         ph: 7.0,
         do: 14.6,
-        turbidity: 1.0,
+        turbidity: 0.0,
         tds: 0.0,
         nitrate: 0.0,
         temperature: 25.0
@@ -149,7 +160,7 @@ function updateWhyList(values) {
 }
 
 wqiForm.addEventListener('submit', async function(e) {
-    e.preventDefault();
+    e.preventDefault(); // stop normal form submission
 
     const values = {
         ph: parseFloat(document.getElementById('ph').value),
@@ -170,34 +181,37 @@ wqiForm.addEventListener('submit', async function(e) {
     };
 
     try {
-        const response = await fetch('/calculate', {
+        const response = await fetch('/calculate', { // send values to backend to compute WQI
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
 
-        const result = await response.json();
-        const wqi = result.wqi;
+        const result = await response.json(); // read result { wqi, status, color }
+        const wqi = result.wqi; // numeric WQI
 
-        wqiBadge.textContent = wqi;
+        wqiBadge.textContent = wqi; // show WQI number
+        wqiBadge.className = `badge px-4 py-3 stat-value bg-${result.color}`; // color badge by status
 
-        statusBadge.innerText = result.status;
-        statusBadge.className = `badge fs-5 px-3 py-2 bg-${result.color}`;
+        statusBadge.innerText = result.status; // show status text
+        statusBadge.className = `badge fs-5 px-3 py-2 bg-${result.color}`; // match status color
 
-        const color = getRangeColor(wqi);
+        const colorHex = colorHexByBootstrap(result.color); // resolve hex for chart segment
+        const baseline = CONFIG && CONFIG.wqi && CONFIG.wqi.chart ? CONFIG.wqi.chart.baseline : 150; // chart total
+        const remainderColor = CONFIG && CONFIG.wqi && CONFIG.wqi.chart ? CONFIG.wqi.chart.remainder_color : '#e9ecef'; // background color
 
-        wqiChart.data.datasets[0].data = [wqi, Math.max(0, 150 - wqi)];
-        wqiChart.data.datasets[0].backgroundColor = [color, '#e9ecef'];
-        wqiChart.update();
+        wqiChart.data.datasets[0].data = [wqi, Math.max(0, baseline - wqi)]; // current vs remaining
+        wqiChart.data.datasets[0].backgroundColor = [colorHex, remainderColor]; // apply colors
+        wqiChart.update(); // re-render chart
 
-        safetyMessage.textContent = getSafetyMessage(wqi);
+        safetyMessage.textContent = getSafetyMessage(result.color); // update guidance
 
         updateScaleMarker(wqi);
         updateParameterSummary(values);
         updateWhyList(values);
 
     } catch (err) {
-        console.error(err);
-        alert("Server error!");
+        console.error(err); // log error to console
+        alert("Server error!"); // show simple alert
     }
 });
